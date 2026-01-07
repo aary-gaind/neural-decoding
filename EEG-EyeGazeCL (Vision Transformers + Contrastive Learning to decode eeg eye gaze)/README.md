@@ -1,5 +1,5 @@
 # EEG-GazeCL
-Contrastive Spatial Decoding of Gaze from EEG
+Contrastive Spatial Decoding of Eye Gaze from EEG
 
 ## Overview
 EEG-GazeCL is a deep learning framework for decoding spatial gaze targets from EEG signals.  
