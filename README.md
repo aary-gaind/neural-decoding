@@ -1,3 +1,3 @@
-# neural-decoding
+# neuroAI-ML-projects
 
-neuroAI, neural decoding personal projects
+neurotech AI/ML, neural decoding personal projects
