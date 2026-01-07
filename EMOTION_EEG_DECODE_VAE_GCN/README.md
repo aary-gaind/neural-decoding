@@ -111,7 +111,7 @@ Performance observed during preliminary experiments:
 
 Single-subject accuracy: 72–80%
 
-Across-subject generalization: 63–68%
+Across-subject generalization: very poor peformance
 
 Temporal glimpse coverage: 75% of high-information regions captured
 
