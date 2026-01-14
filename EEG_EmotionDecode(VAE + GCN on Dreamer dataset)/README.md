@@ -1,146 +1,140 @@
-VAECGN-Dreamer
+# VAE-GNN-DREAMER  
+**Spatio-Temporal VAE + Graph Neural Networks for EEG Emotion Recognition**
 
-Variational Attention EEG Graph Convolutional Network
+This repository implements a **hybrid deep learning pipeline for EEG-based emotion recognition** using the **DREAMER dataset**.  
+The architecture integrates:
 
-Overview
+- **3D Convolutional Variational Autoencoder (VAE)** for spatio-temporal EEG modeling  
+- **Frequency-band Graph Neural Networks (GNNs)** built from mutual information (MI) connectivity  
+- **Temporal modeling with GRU**  
+- **Multi-task learning** with focal loss, triplet-center loss, and VAE reconstruction loss  
 
-VAECGN-Dreamer is a deep learning framework for EEG signal decoding that integrates graph-based spatial modeling, variational attention, and a reinforcement learning-driven glimpse mechanism.
+The system jointly predicts **binary valence and arousal** while learning structured latent EEG representations.
 
-The model treats EEG as a spatial-temporal graph and learns task-relevant representations by selectively attending to informative channels and time segments.
-A Dreamer-style reinforcement module guides the glimpse selection, enabling the network to focus on regions of EEG data that maximize downstream classification performance.
+---
 
-Evaluated on multi-subject EEG datasets, VAECGN-Dreamer achieves improved accuracy, more stable representations, and robust subject generalization compared to standard CNN, LSTM, and GCN baselines.
+## Dataset
 
-This repository contains the original architecture and reinforcement methodology.
+**DREAMER Dataset**
+- 23 subjects  
+- 18 emotion-eliciting videos per subject  
+- 14 EEG channels (Emotiv EPOC)  
+- Self-reported ratings: Valence, Arousal, Dominance (1–5)
 
-Key Ideas
+### Label Processing
+- Valence ≥ 3 → 1, else 0  
+- Arousal ≥ 3 → 1, else 0  
 
-EEG signals are sparse and structured; not all channels or time segments carry equal information.
+A **4-class emotion label** is formed for metric learning:
+emotion_class = 2 * arousal + valence
 
-Variational attention enables uncertainty-aware feature selection, improving robustness across trials and subjects.
+---
 
-Graph Convolutional Networks (GCNs) model spatial relationships between EEG channels.
+## EEG Preprocessing
 
-A reinforcement-guided glimpse mechanism allows dynamic temporal and spatial focusing:
+### Channel Layout
+The 14 EEG channels are embedded into a **9×9 spatial grid** matching the international 10-20 system:
 
-The location network predicts glimpse positions
+AF3, F7, F3, FC5, T7, P7, O1,
+O2, P8, T8, FC6, F4, F8, AF4
 
-The GRU core integrates sequential glimpses
+### Temporal Window
+- Each EEG trial is truncated to the **last 1280 samples**
+- Input tensor shape:
 
-The value network provides baseline rewards to stabilize learning
+(Batch, 1, Time=1280, Height=9, Width=9)
 
-Rewards are applied at the episode level to encourage long-term feature utility.
+---
 
-Model Overview
+## Frequency Band Graph Construction
 
-Input
+EEG signals are filtered into **five frequency bands**:
 
-EEG trials (channels × time samples)
+| Band  | Frequency (Hz) |
+|------|----------------|
+| Delta | 1–4 |
+| Theta | 4–8 |
+| Alpha | 8–13 |
+| Beta  | 13–30 |
+| Gamma | 30–45 |
 
-Optional adjacency matrix for channel graph structure
+For each band:
+1. **Differential Entropy (DE)** is computed per channel (node features)
+2. **Mutual Information (MI)** is computed between all channel pairs
+3. MI matrices are normalized and converted into graphs
+4. Graphs are processed using **PyTorch Geometric**
 
-Backbone
+Each EEG trial yields **5 graphs (one per band)**.
 
-VAE-inspired EEG encoder: projects EEG into a latent space capturing uncertainty and trial variability
+---
 
-Graph convolution layers: capture spatial dependencies between electrodes
+## Model Architecture
 
-GRU core: processes glimpses sequentially to capture temporal dynamics
+### 1. Spatio-Temporal VAE
+- 3D convolutional encoder/decoder
+- Learns latent representation `z ∈ ℝ¹²⁸`
+- Preserves spatial electrode structure and temporal dynamics
 
-Glimpse Policy (Reinforcement)
+### 2. GNN + GRU Branch
+- GCN layers per frequency band
+- Outputs node embeddings: `(Band, Node, Feature)`
+- Flattened and passed through a GRU for temporal modeling
 
-Location network (policy): predicts the next patch or channel-time region to attend
+### 3. Feature Fusion
+Final feature vector:
+[ GRU_Output || VAE_Latent_z ]
+Dimension: **256**
 
-Reward: classification accuracy at episode end
+---
 
-Value network (baseline): reduces variance of gradient estimates
+## Loss Functions
 
-Training: REINFORCE with decoupled optimization from classifier and encoder
+The model is trained end-to-end using a weighted sum of:
 
-Outputs
+### 1. Focal Loss
+- Handles class imbalance in valence/arousal prediction
+- Applied independently to both labels
 
-Trial-level classification (e.g., cognitive state, motor imagery, or target task)
+### 2. Triplet-Center Loss
+- Enforces structured separation in 4-class emotion embedding space
+- Uses learnable class centers
 
-Latent embeddings representing attended EEG patterns
+### 3. VAE Loss
+- Mean squared reconstruction loss
+- KL divergence regularization
 
-Reinforcement Mechanism
+Total loss:
+L = β₁ · L_focal + β₂ · L_triplet + β₃ · L_vae
 
-Episodes: one EEG trial per episode
+---
 
-Action: glimpse selection (spatial, temporal, or both)
+## Training Pipeline
 
-Policy update: REINFORCE with baseline
+1. Load EEG tensors for VAE branch
+2. Load cached graph objects for GNN branch
+3. Synchronize batching across:
+   - VAE DataLoader
+   - GNN DataLoader
+   - Label DataLoader
+4. Forward pass through:
+   - VAE
+   - GNN → GRU
+   - Feature fusion
+5. Backpropagate combined loss
+6. Gradient clipping and NaN stabilization applied
 
-Exploration: stochastic sampling during training, deterministic evaluation during inference
+---
 
-Losses:
+## Dependencies
 
-Classification loss for encoder/core output
+- Python ≥ 3.9  
+- PyTorch ≥ 2.0  
+- PyTorch Geometric  
+- NumPy, SciPy  
+- scikit-learn  
+- pandas  
 
-REINFORCE loss for policy network
+Install PyG dependencies:
+```bash
+pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric
 
-KL divergence for variational encoder regularization
-
-This setup enables attention-driven feature extraction and sample-efficient learning without explicit channel or time labels.
-
-Evaluation Metrics
-
-Classification accuracy (trial-level)
-
-Per-subject performance for generalization assessment
-
-Confusion matrices for error analysis
-
-Temporal attention consistency: do glimpses align with expected task-relevant EEG patterns?
-
-Embedding separation: latent representations of different classes are well-separated
-
-Datasets
-
-VAECGN-Dreamer has been evaluated on EEG datasets with multi-subject structure:
-
-Motor imagery: e.g., BCI Competition IV
-
-Cognitive task EEG: custom multi-trial datasets
-
-EEG preprocessing: bandpass filtering, normalization, and optional graph adjacency creation based on electrode layout
-
-Mid-Results (Example)
-
-Performance observed during preliminary experiments:
-
-Single-subject accuracy: 72–80%
-
-Across-subject generalization: very poor peformance
-
-Temporal glimpse coverage: 75% of high-information regions captured
-
-Latent representation clustering: visually separable embeddings per class
-
-Observations:
-
-Model reduces catastrophic misclassification by focusing on informative EEG patches
-
-Variational attention mitigates subject-specific overfitting
-
-Reinforcement-driven glimpses improve interpretability: policy often selects physiologically relevant channels and time windows
-
-Highlights
-
-Combines VAE, GCN, GRU, and REINFORCE in a single EEG framework
-
-Learns dynamic attention policies without explicit supervision
-
-Produces interpretable latent embeddings reflecting spatial-temporal EEG structure
-
-Supports multi-subject training and generalization evaluation
-
-Future Directions
-
-Integrate contrastive losses to improve inter-subject alignment
-
-Apply to real-time BCI decoding for adaptive attention-based feedback
-
-Extend reinforcement reward to multi-step or hierarchical EEG tasks
-
-Incorporate cross-modal EEG embeddings (e.g., with eye-tracking or behavior)
