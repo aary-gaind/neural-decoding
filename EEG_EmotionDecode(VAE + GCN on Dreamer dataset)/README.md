@@ -1,6 +1,6 @@
 VAECGN-Dreamer
 
-Variational Attention EEG Graph Convolutional Network with Reinforcement-Based Glimpse Policy
+Variational Attention EEG Graph Convolutional Network
 
 Overview
 
